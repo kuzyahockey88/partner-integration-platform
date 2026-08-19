@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from .core.config import settings
 from .core.database import init_db, close_db
+from .api.v1.endpoints import operations
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,6 +33,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(operations.router, prefix="/api/v1", tags=["operations"])
 
 @app.get("/")
 async def root():

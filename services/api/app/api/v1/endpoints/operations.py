@@ -4,6 +4,10 @@ from loguru import logger
 from ....core.database import get_db
 from ....services.operation_service import OperationService
 from ....schemas.operation import OperationCreateRequest, OperationResponse, OperationStatusResponse
+from ....models.operation import ValidationError
+from ....schemas.operation import ValidationErrorResponse
+from typing import List
+from sqlalchemy import select
 
 router = APIRouter()
 
@@ -58,3 +62,23 @@ async def get_operation_status(
     except Exception as e:
         logger.error(f"Ошибка при получении статуса операции: {str(e)}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервиса")
+
+@router.get("/operations/{operation_id}/errors", response_model=List[ValidationErrorResponse])
+async def get_operation_errors(
+        operation_id: str,
+        db: AsyncSession = Depends(get_db)
+):
+    service = OperationService(db)
+    try:
+        operation = await service.get_operation_by_id(operation_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Операция не найдена")
+
+    stmt = select(ValidationError).where(
+        ValidationError.operation_id == operation.id
+    ).order_by(ValidationError.row_number)
+
+    result = await db.execute(stmt)
+    errors = result.scalars().all()
+
+    return errors

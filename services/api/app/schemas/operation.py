@@ -46,3 +46,14 @@ class OperationStatusResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ValidationErrorResponse(BaseModel):
+    id: int
+    row_number: Optional[int]
+    field_name: Optional[str]
+    error_code: str
+    error_message: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

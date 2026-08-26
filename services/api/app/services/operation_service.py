@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from ..models.operation import IntegrationOperation, OperationStatus, StatusHistory
 from ..schemas.operation import OperationCreateRequest
+from ..validators.payload_validator import PayloadValidator
 
 class OperationService:
     def __init__(self, db: AsyncSession):
@@ -50,6 +51,8 @@ class OperationService:
             await self.db.rollback()
             raise ValueError("Операция с таким external_request_id уже существует")
 
+        await self._validate_operation(operation)
+
         return operation
 
     async def get_operation_by_id(self, operation_id: str) -> IntegrationOperation:
@@ -70,3 +73,42 @@ IntegrationOperation.partner_id == partner_id,
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def _validate_operation(self, operation: IntegrationOperation) -> None:
+        errors = PayloadValidator.validate(
+            payload=operation.payload,
+            operation_type=operation.operation_type,
+            operation_id=operation.id
+        )
+
+        if errors:
+            for error in errors:
+                self.db.add(error)
+
+            operation.status = OperationStatus.VALIDATION_FAILED
+            operation.updated_at = datetime.utcnow()
+
+            operation.error_details = {
+                'errors': [
+                    {
+                        "row": e.row_number,
+                        "field": e.field_name,
+                        "code": e.error_code,
+                        "message": e.error_message
+                    }
+                    for e in errors
+                ],
+                "total_errors": len(errors)
+            }
+
+            history = StatusHistory(
+                operation=operation,
+                from_status=OperationStatus.RECEIVED,
+                to_status=OperationStatus.VALIDATION_FAILED,
+                reason=f"Ошибка валидации: {len(errors)} шт.",
+                changed_at=datetime.utcnow()
+            )
+            self.db.add(history)
+
+            await self.db.commit()
+            await self.db.refresh(operation)

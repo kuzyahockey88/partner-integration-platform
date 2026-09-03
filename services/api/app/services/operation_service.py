@@ -1,4 +1,5 @@
 import uuid
+from loguru import logger
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -6,12 +7,13 @@ from sqlalchemy.exc import IntegrityError
 from ..models.operation import IntegrationOperation, OperationStatus, StatusHistory
 from ..schemas.operation import OperationCreateRequest
 from ..validators.payload_validator import PayloadValidator
+from .cache_service import cache_service
 
 class OperationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_operation(self, request: OperationCreateRequest) -> IntegrationOperation:
+    async def create_operation(self, request: OperationCreateRequest, user_id: int) -> IntegrationOperation:
         if request.external_request_id:
             existing = await self._find_by_external_id(
                 request.partner_id,
@@ -31,6 +33,7 @@ class OperationService:
             status=OperationStatus.RECEIVED,
             received_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
+            user_id=user_id,
         )
 
         self.db.add(operation)
@@ -112,3 +115,7 @@ IntegrationOperation.partner_id == partner_id,
 
             await self.db.commit()
             await self.db.refresh(operation)
+
+            cache_key = f"operation_status:{operation.operation_id}"
+            await cache_service.delete(cache_key)
+            logger.info(f"Cache invalidated for operation {operation.operation_id}")

@@ -12,6 +12,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 from services.api.app.core.config import settings
 from services.api.app.core.database import Base
 
+from services.api.app.models.user import User
+from services.api.app.models.operation import IntegrationOperation, StatusHistory, ValidationError
+
 config = context.config
 
 # Используем синхронный драйвер для Alembic

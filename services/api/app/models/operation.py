@@ -25,6 +25,8 @@ class IntegrationOperation(Base):
     external_request_id = Column(String(128), nullable=True, index=True)
     operation_type = Column(String(50), nullable=False)
 
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
     status = Column(Enum(OperationStatus), default=OperationStatus.RECEIVED)
     version = Column(Integer, default=1)
 
@@ -43,6 +45,8 @@ class IntegrationOperation(Base):
     cascade="all, delete-orphan")
     validation_errors = relationship("ValidationError", back_populates="operation",
     cascade="all, delete-orphan")
+
+    user = relationship("User", back_populates="operations")
 
     __table_args__ = (
         Index('idx_operations_partner_status', 'partner_id', 'status'),

@@ -6,11 +6,18 @@ class Settings(BaseSettings):
     version: str = Field(default="1.0.0", alias="VERSION")
     debug: bool = Field(default=False, alias="DEBUG")
 
+    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    cache_ttl: int = Field(default=300, alias="CACHE_TTL")
+
     postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_user: str = Field(default="postgres", alias="POSTGRES_USER")
     postgres_password: str = Field(default="postgres", alias="POSTGRES_PASSWORD")
     postgres_db: str = Field(default="integration_db", alias="POSTGRES_DB")
+
+    secret_key: str = Field(default="your-secret-key-change-me", alias="SECRET_KEY")
+    jwt_algorithm: str = Field( default="HS256", alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     @property
     def database_url(self) -> str:

@@ -31,6 +31,7 @@ class OperationResponse(BaseModel):
     status: OperationStatus
     received_at: datetime
     partner_id: int
+    user_id: Optional[int] = None
 
     class Config:
         from_attributes = True

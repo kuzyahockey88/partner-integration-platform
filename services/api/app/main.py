@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from .core.config import settings
 from .core.database import init_db, close_db
-from .api.v1.endpoints import operations
+from .api.v1.endpoints import operations, auth
+from .services.cache_service import cache_service
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -12,10 +14,17 @@ async def lifespan(app: FastAPI):
     logger.info(f"Database URL: {settings.database_url}")
     await init_db()
     logger.info("Database initialized")
+
+    await cache_service.connect()
+
     yield
+
     logger.info("Shutting down application...")
     await close_db()
-    logger.info("Database connection closed")
+    logger.info("Database connect closed")
+
+    await cache_service.close()
+    logger.info("Redis connection closed")
 
 app = FastAPI(
     title=settings.project_name,
@@ -35,6 +44,7 @@ app.add_middleware(
 )
 
 app.include_router(operations.router, prefix="/api/v1", tags=["operations"])
+app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 
 @app.get("/")
 async def root():

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 
@@ -32,6 +32,8 @@ class OperationResponse(BaseModel):
     received_at: datetime
     partner_id: int
     user_id: Optional[int] = None
+    operation_type: str
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -55,6 +57,15 @@ class ValidationErrorResponse(BaseModel):
     error_code: str
     error_message: str
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class OperationListResponse(BaseModel):
+    total: int
+    skip: int
+    limit: int
+    items: List[OperationResponse]
 
     class Config:
         from_attributes = True

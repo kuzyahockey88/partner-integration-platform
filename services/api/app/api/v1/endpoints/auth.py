@@ -5,10 +5,28 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from ....core.database import get_db
 from ....services.auth_service import AuthService
-from ....schemas.auth import UserLoginRequest, TokenResponse, UserResponse
+from ....schemas.auth import UserCreateRequest, UserLoginRequest, TokenResponse, UserResponse
 
 router = APIRouter()
 
+
+@router.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register_user(
+        request: UserCreateRequest,
+        db: AsyncSession = Depends(get_db)
+):
+
+    auth_service = AuthService(db)
+
+    try:
+        user = await auth_service.create_user(request)
+        logger.info(f"User registered: {user.username} ({user.email})")
+        return user
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/auth/token", response_model=TokenResponse)
 async def login_for_access_token(

@@ -2,12 +2,14 @@ import uuid
 from loguru import logger
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, and_
 from sqlalchemy.exc import IntegrityError
 from ..models.operation import IntegrationOperation, OperationStatus, StatusHistory
 from ..schemas.operation import OperationCreateRequest
 from ..validators.payload_validator import PayloadValidator
 from .cache_service import cache_service
+from typing import Optional, List, Tuple
+
 
 class OperationService:
     def __init__(self, db: AsyncSession):
@@ -56,6 +58,15 @@ class OperationService:
 
         await self._validate_operation(operation)
 
+        if operation.status == OperationStatus.RECEIVED:
+            from ..worker.tasks import process_operation
+            process_operation.delay(operation.operation_id)
+            logger.info(f"Задача в Celery: {operation.operation_id}")
+        else:
+            logger.info(
+                f"Операция {operation.operation_id} не отправлена в Celery"
+                f"(статус: {operation.status.value})"
+            )
         return operation
 
     async def get_operation_by_id(self, operation_id: str) -> IntegrationOperation:
@@ -119,3 +130,54 @@ IntegrationOperation.partner_id == partner_id,
             cache_key = f"operation_status:{operation.operation_id}"
             await cache_service.delete(cache_key)
             logger.info(f"Cache invalidated for operation {operation.operation_id}")
+
+    async def list_operations(
+        self,
+        partner_id: Optional[int] = None,
+        status: Optional[OperationStatus] = None,
+        operation_type: Optional[str] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> Tuple[List[IntegrationOperation], int]:
+
+        conditions = []
+
+        if partner_id is not None:
+            conditions.append(IntegrationOperation.partner_id == partner_id)
+
+        if status is not None:
+            conditions.append(IntegrationOperation.status == status)
+
+        if operation_type is not None:
+            conditions.append(IntegrationOperation.operation_type == operation_type)
+
+        if date_from is not None:
+            conditions.append(IntegrationOperation.received_at >= date_from)
+
+        if date_to is not None:
+            conditions.append(IntegrationOperation.received_at <= date_to)
+
+        count_stmt = select(func.count()).select_from(IntegrationOperation)
+        if conditions:
+            count_stmt = count_stmt.where(and_(*conditions))
+
+        count_result = await self.db.execute(count_stmt)
+        total = count_result.scalar_one()
+
+        stmt = select(IntegrationOperation)
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+
+        stmt = (
+            stmt
+            .order_by(IntegrationOperation.received_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        result = await self.db.execute(stmt)
+        operations = list(result.scalars().all())
+
+        return operations, total

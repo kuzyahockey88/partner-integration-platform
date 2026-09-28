@@ -4,6 +4,7 @@ from loguru import logger
 import json
 from ....core.database import get_db
 from ....services.operation_service import OperationService
+from ....services.llm_service import llm_service
 from ....schemas.operation import (
     OperationCreateRequest,
     OperationResponse,
@@ -157,4 +158,26 @@ async def get_operation_errors(
     result = await db.execute(stmt)
     errors = result.scalars().all()
 
-    return errors
+    enriched_errors = []
+    for error in errors:
+        explanation = await llm_service.explain_validation_error(
+            error_code=error.error_code,
+            field_name=error.field_name,
+            row_number=error.row_number,
+            error_message=error.error_message,
+            operation_type=operation.operation_type,
+        )
+
+        enriched_errors.append(
+            ValidationErrorResponse(
+                id=error.id,
+                row_number=error.row_number,
+                field_name=error.field_name,
+                error_code=error.error_code,
+                error_message=error.error_message,
+                created_at=error.created_at,
+                llm_explanation=explanation,
+            )
+        )
+
+    return enriched_errors

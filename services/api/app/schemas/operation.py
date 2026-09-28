@@ -57,6 +57,7 @@ class ValidationErrorResponse(BaseModel):
     error_code: str
     error_message: str
     created_at: datetime
+    llm_explanation: Optional[str] = None
 
     class Config:
         from_attributes = True

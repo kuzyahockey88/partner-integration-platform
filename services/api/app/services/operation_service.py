@@ -2,9 +2,9 @@ import uuid
 from loguru import logger
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, delete
 from sqlalchemy.exc import IntegrityError
-from ..models.operation import IntegrationOperation, OperationStatus, StatusHistory
+from ..models.operation import IntegrationOperation, OperationStatus, StatusHistory, ValidationError
 from ..schemas.operation import OperationCreateRequest
 from ..validators.payload_validator import PayloadValidator
 from .cache_service import cache_service
@@ -89,6 +89,11 @@ IntegrationOperation.partner_id == partner_id,
         return result.scalar_one_or_none()
 
     async def _validate_operation(self, operation: IntegrationOperation) -> None:
+        await self.db.execute(
+            delete(ValidationError).where(ValidationError.operation_id == operation.id)
+        )
+        await self.db.flush()
+
         errors = PayloadValidator.validate(
             payload=operation.payload,
             operation_type=operation.operation_type,
@@ -181,3 +186,63 @@ IntegrationOperation.partner_id == partner_id,
         operations = list(result.scalars().all())
 
         return operations, total
+
+    async def retry_operation(
+        self,
+        operation_id: str,
+        user_id: int,
+    ) -> IntegrationOperation:
+
+        operation = await self.get_operation_by_id(operation_id)
+
+        allowed_statuses = {
+            OperationStatus.FAILED,
+            OperationStatus.VALIDATION_FAILED,
+        }
+
+        if operation.status not in allowed_statuses:
+            raise ValueError(
+                f"Нельзя перезапустить операцию в статусе "
+                f"{operation.status.value}. "
+                f"Разрешено только: {', '.join(s.value for s in allowed_statuses)}"
+            )
+
+        old_status = operation.status
+        operation.status = OperationStatus.RECEIVED
+        operation.retry_count = 0
+        operation.last_error_message = None
+        operation.updated_at = datetime.utcnow()
+        operation.completed_at = None
+
+        history = StatusHistory(
+            operation=operation,
+            from_status=old_status,
+            to_status=OperationStatus.RECEIVED,
+            reason=f"Ручной перезапуск пользователем #{user_id}",
+            changed_at=datetime.utcnow(),
+        )
+        self.db.add(history)
+
+        await self.db.commit()
+        await self.db.refresh(operation)
+
+        await self._validate_operation(operation)
+
+        cache_key = f"operation_status:{operation.operation_id}"
+        await cache_service.delete(cache_key)
+
+        if operation.status == OperationStatus.RECEIVED:
+            from ..worker.tasks import process_operation
+            process_operation.delay(operation.operation_id)
+            logger.info(
+                f"Ручной retry операции {operation.operation_id} "
+                f"(было: {old_status.value}, пользователь: {user_id})"
+            )
+        else:
+            logger.info(
+                f"Retry отменен: {operation.operation_id} "
+                f"снова не прошла валидация "
+                f"(статус: {operation.status.value})"
+            )
+
+        return operation

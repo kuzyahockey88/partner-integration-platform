@@ -23,6 +23,7 @@ from ....models.user import User
 
 router = APIRouter()
 
+
 @router.post("/operations", response_model=OperationResponse, status_code=201)
 async def create_operation(
         request: OperationCreateRequest,
@@ -101,6 +102,44 @@ async def list_operations(
             for op in operations
         ],
     )
+
+
+@router.post("/operations/{operation_id}/retry", response_model=OperationStatusResponse)
+async def retry_operation(
+    operation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+
+    service = OperationService(db)
+
+    try:
+        operation = await service.retry_operation(
+            operation_id=operation_id,
+            user_id=current_user.id,
+        )
+
+        logger.info(
+            f"Retry операции {operation_id} "
+            f"(пользователь: {current_user.username})"
+        )
+
+        return OperationStatusResponse(
+            operation_id=operation.operation_id,
+            status=operation.status,
+            received_at=operation.received_at,
+            updated_at=operation.updated_at,
+            completed_at=operation.completed_at,
+            retry_count=operation.retry_count,
+            last_error_message=operation.last_error_message,
+        )
+    except ValueError as e:
+        logger.warning(f"Ошибка retry: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при retry: {str(e)}")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
+
 
 @router.get("/operations/{operation_id}/status", response_model=OperationStatusResponse)
 async def get_operation_status(

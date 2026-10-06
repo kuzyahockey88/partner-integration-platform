@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.pytest_cache
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Tests
+tests/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Docs
+docs/
+*.md
+!README.md
+
+# Logs
+*.log
+flower.db

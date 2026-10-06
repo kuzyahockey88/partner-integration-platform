@@ -15,6 +15,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - integration_network
 
   redis:
     image: redis:7-alpine
@@ -26,6 +28,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - integration_network
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
@@ -41,6 +45,97 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - integration_network
+
+  # ✅ НОВЫЙ СЕРВИС: API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: integration_api
+    command: uvicorn services.api.app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - integration_network
+
+  # ✅ НОВЫЙ СЕРВИС: Celery Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: integration_worker
+    command: celery -A services.api.app.worker.celery_app.celery_app worker --loglevel=info --pool=solo -E
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - integration_network
+
+  # ✅ НОВЫЙ СЕРВИС: Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: integration_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - integration_network
+
+  flower:
+    image: mher/flower:latest
+    container_name: integration_flower
+    command: celery --broker=amqp://guest:guest@rabbitmq:5672// flower --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - rabbitmq
+      - redis
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - integration_network
 
 volumes:
   postgres_data:
+
+networks:
+  integration_network:
+    driver: bridge

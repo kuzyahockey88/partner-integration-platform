@@ -65,7 +65,7 @@ class AuthService:
             username = request.username,
             email = request.email,
             hashed_password = hashed_password,
-            role = request.role or UserRole.PARTNER
+            role = UserRole.PARTNER
         )
 
         self.db.add(user)

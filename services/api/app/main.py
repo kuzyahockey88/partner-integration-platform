@@ -11,9 +11,10 @@ from .services.cache_service import cache_service
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting application...")
-    logger.info(f"Database URL: {settings.database_url}")
-    await init_db()
-    logger.info("Database initialized")
+
+    if settings.debug:
+        logger.info("DEBUG model: running create_all (dev convenience)")
+        await init_db()
 
     await cache_service.connect()
 
@@ -21,10 +22,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down application...")
     await close_db()
-    logger.info("Database connect closed")
-
     await cache_service.close()
-    logger.info("Redis connection closed")
 
 app = FastAPI(
     title=settings.project_name,

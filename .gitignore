@@ -1,9 +1,22 @@
+# Python
 venv/
 env/
-.env
-*.pyc
+.venv/
 __pycache__/
+*.pyc
 *.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -13,11 +26,6 @@ __pycache__/
 
 # Docker
 *.log
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
 
 # OS
 .DS_Store

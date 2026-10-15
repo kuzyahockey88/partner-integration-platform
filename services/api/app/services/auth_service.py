@@ -65,14 +65,18 @@ class AuthService:
             username = request.username,
             email = request.email,
             hashed_password = hashed_password,
-            role = UserRole.PARTNER
+            role = UserRole.PARTNER,
+            partner_id = None,
         )
 
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
 
-        logger.info(f"User created: {user.username} ({user.email})")
+        logger.info(
+            f"User created: {user.username} ({user.email})"
+            f"role={user.role.value} partner_id={user.partner_id}"
+        )
         return user
 
     async def get_current_user(self, token: str) -> Optional[User]:

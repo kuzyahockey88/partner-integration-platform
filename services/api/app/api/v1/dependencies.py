@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.app.core.database import get_db
 from services.api.app.services.auth_service import AuthService
-from services.api.app.models.user import User, UserRole
+from ...models.user import User, UserRole
+from ...models.operation import IntegrationOperation
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
@@ -51,3 +52,13 @@ async def get_current_admin(
             detail="Admin privileges required"
         )
     return current_user
+
+def check_operation_access(operation: IntegrationOperation, user: User) -> None:
+    if user.role in (UserRole.MANAGER, UserRole.ADMIN):
+        return
+
+    if user.partner_id is None or operation.partent_id != user.partner_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Нет доступа к этой операции',
+        )

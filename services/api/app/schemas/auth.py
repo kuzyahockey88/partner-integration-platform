@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
 from ..models.user import UserRole
 
 
@@ -23,6 +24,7 @@ class UserResponse(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    partner_id: Optional[int] = None
 
     class Config:
         from_attributes = True

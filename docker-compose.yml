@@ -48,7 +48,6 @@ services:
     networks:
       - integration_network
 
-  # ✅ API
   api:
     build:
       context: .
@@ -71,6 +70,8 @@ services:
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini:ro
       - ./scripts:/app/scripts:ro
+      - ./tests:/app/tests                    # ← НОВОЕ
+      - ./pytest.ini:/app/pytest.ini:ro       # ← НОВОЕ
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,7 +83,6 @@ services:
     networks:
       - integration_network
 
-  # ✅ Celery Worker
   worker:
     build:
       context: .
@@ -111,7 +111,6 @@ services:
     networks:
       - integration_network
 
-  # ✅ Celery Beat — планировщик (для авто-ретайла, задача 1.3)
   beat:
     build:
       context: .

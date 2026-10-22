@@ -1,7 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from typing import AsyncGenerator
 
@@ -9,33 +8,53 @@ from services.api.app.main import app
 from services.api.app.core.database import Base, get_db
 from services.api.app.core.config import settings
 
-# Синхронный драйвер для тестов
 TEST_DATABASE_URL = settings.database_url.replace(
-    "postgresql+asyncpg://", "postgresql://"
+    "/integration_db", "/integration_test_db"
 )
-engine = create_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
-TestingSessionLocal = sessionmaker(engine, expire_on_commit=False)
 
+test_engine = create_async_engine(
+    TEST_DATABASE_URL,
+    echo=False,
+    poolclass=NullPool,
+)
 
-def override_get_db():
-    with TestingSessionLocal() as session:
-        yield session
+TestingSessionLocal = async_sessionmaker(
+    test_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
+
+async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with TestingSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 
 app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest.fixture(scope="function", autouse=True)
-def setup_database():
-    Base.metadata.create_all(engine)
+async def setup_database():
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield
-    Base.metadata.drop_all(engine)
-
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
 
 @pytest.fixture(scope="function")
 async def client() -> AsyncGenerator[AsyncClient, None]:
-    """Асинхронный клиент для HTTP-запросов, но с синхронной БД."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test"
+    ) as ac:
         yield ac
 
 
@@ -47,7 +66,6 @@ async def auth_token(client: AsyncClient) -> str:
             "username": "testuser",
             "email": "test@example.com",
             "password": "test123",
-            "role": "partner"
         }
     )
     response = await client.post(

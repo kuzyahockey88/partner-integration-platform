@@ -32,6 +32,18 @@ async def create_operation(
         current_user: User = Depends(get_current_active_user)
 ):
 
+    if  current_user.role == UserRole.PARTNER:
+        if current_user.partner_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Пользователь не привязан к партнеру",
+            )
+        if request.partner_id != current_user.partner_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Нельзя создать операции от имени другого партнера",
+            )
+
     service = OperationService(db)
 
     try:
@@ -71,6 +83,17 @@ async def list_operations(
 
     service = OperationService(db)
 
+    allowed_partner_ids = None
+    if current_user.role == UserRole.PARTNER:
+        if current_user.partner_id is None:
+            return OperationListResponse(
+                total=0,
+                skip=skip,
+                limit=limit,
+                items=[],
+            )
+        allowed_partner_ids = [current_user.partner_id]
+
     operations, total = await service.list_operations(
         partner_id=partner_id,
         status=status,
@@ -79,11 +102,13 @@ async def list_operations(
         date_to=date_to,
         skip=skip,
         limit=limit,
+        allowed_partner_ids=allowed_partner_ids,
     )
 
     logger.info(
         f"📋 Список операций: найдено {total}, "
-        f"показано {len(operations)} (skip={skip}, limit={limit})"
+        f"показано {len(operations)} (skip={skip}, limit={limit},"
+        f"user={current_user.username}, role={current_user.role.value})"
     )
 
     return OperationListResponse(
@@ -113,6 +138,13 @@ async def retry_operation(
 ):
 
     service = OperationService(db)
+
+    try:
+        operation = await service.get_operation_by_id(operation_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Операция не найдена")
+
+    check_operation_access(operation, current_user)
 
     try:
         operation = await service.retry_operation(

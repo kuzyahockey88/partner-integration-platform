@@ -57,7 +57,7 @@ def check_operation_access(operation: IntegrationOperation, user: User) -> None:
     if user.role in (UserRole.MANAGER, UserRole.ADMIN):
         return
 
-    if user.partner_id is None or operation.partent_id != user.partner_id:
+    if user.partner_id is None or operation.partner_id != user.partner_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail='Нет доступа к этой операции',

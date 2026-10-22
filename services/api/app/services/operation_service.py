@@ -145,12 +145,18 @@ IntegrationOperation.partner_id == partner_id,
         date_to: Optional[datetime] = None,
         skip: int = 0,
         limit: int = 20,
+        allowed_partner_ids: Optional[List[int]] = None,
     ) -> Tuple[List[IntegrationOperation], int]:
 
         conditions = []
 
         if partner_id is not None:
             conditions.append(IntegrationOperation.partner_id == partner_id)
+
+        if allowed_partner_ids is not None:
+            conditions.append(
+                IntegrationOperation.partner_id.in_(allowed_partner_ids)
+            )
 
         if status is not None:
             conditions.append(IntegrationOperation.status == status)

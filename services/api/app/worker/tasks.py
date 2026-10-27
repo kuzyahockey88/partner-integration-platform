@@ -1,12 +1,13 @@
 import asyncio
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from celery import Task
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, and_, func, text
 
 from .celery_app import celery_app
+from ..models.user import User
 from ..core.database import AsyncSessionLocal, engine
 from ..models.operation import (
     IntegrationOperation,
@@ -14,7 +15,6 @@ from ..models.operation import (
     StatusHistory,
 )
 from ..services.cache_service import cache_service
-from ..models.user import User
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -196,3 +196,55 @@ async def _invalidate_cache(operation_id: str)-> None:
         logger.debug(f"кеш инвалидирован для {operation_id}")
     except Exception as e:
         logger.warning(f"Не удалось инвалидировать кеш: {e}")
+
+@celery_app.task(name="worker.retry_failed_operations")
+def retry_failed_operations():
+    """
+    Периодическая задача: находит застрявшие операции и перезапускает их.
+    """
+    logger.info("[beat] retry_failed_operations: старт")
+    return asyncio.run(_retry_failed_operations_async())
+
+
+async def _retry_failed_operations_async() -> dict:
+    stuck_threshold_sql = func.now() - text("interval '5 minutes'")
+
+    try:
+        async with AsyncSessionLocal() as session:
+            stmt = select(IntegrationOperation).where(
+                and_(
+                    IntegrationOperation.status.in_([
+                        OperationStatus.RETRYING,
+                        OperationStatus.RECEIVED,
+                    ]),
+                    IntegrationOperation.updated_at < stuck_threshold_sql,
+                    IntegrationOperation.retry_count < IntegrationOperation.max_retries,
+                )
+            ).limit(50)
+
+            result = await session.execute(stmt)
+            operations = list(result.scalars().all())
+
+            if not operations:
+                logger.debug("[beat] retry_failed_operations: застрявших операций нет")
+                return {"retried": 0}
+
+            logger.info(
+                f"[beat] retry_failed_operations: найдено {len(operations)} "
+                f"застрявших операций"
+            )
+
+            for op in operations:
+                process_operation.delay(op.operation_id)
+                logger.info(
+                    f"[beat] операция {op.operation_id} отправлена в очередь "
+                    f"(status={op.status.value}, retry={op.retry_count})"
+                )
+
+            return {"retried": len(operations)}
+
+    except Exception as e:
+        logger.exception(f"[beat] retry_failed_operations ошибка: {e}")
+        return {"retried": 0, "error": str(e)}
+    finally:
+        await engine.dispose()

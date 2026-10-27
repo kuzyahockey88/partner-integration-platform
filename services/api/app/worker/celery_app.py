@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 from ..core.config import settings
 
 celery_app = Celery(
@@ -27,4 +28,12 @@ celery_app.conf.update(
     task_default_queue="default",
     task_default_exchange="default",
     task_default_routing_key="default",
+
+    beat_schedule={
+        "retry-failed-operations": {
+            "task": "worker.retry_failed_operations",
+            "schedule": crontab(minute="*/2"),
+            "options": {"queue": "default"},
+        },
+    },
 )

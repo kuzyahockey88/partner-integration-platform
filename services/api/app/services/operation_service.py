@@ -1,6 +1,6 @@
 import uuid
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, delete
 from sqlalchemy.exc import IntegrityError
@@ -33,8 +33,8 @@ class OperationService:
             operation_type=request.operation_type,
             payload=request.payload,
             status=OperationStatus.RECEIVED,
-            received_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            received_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             user_id=user_id,
         )
 
@@ -45,7 +45,7 @@ class OperationService:
             from_status=None,
             to_status=OperationStatus.RECEIVED,
             reason="Операция создана",
-            changed_at=datetime.utcnow()
+            changed_at=datetime.now(timezone.utc)
         )
         self.db.add(history)
 
@@ -105,7 +105,7 @@ IntegrationOperation.partner_id == partner_id,
                 self.db.add(error)
 
             operation.status = OperationStatus.VALIDATION_FAILED
-            operation.updated_at = datetime.utcnow()
+            operation.updated_at = datetime.now(timezone.utc)
 
             operation.error_details = {
                 'errors': [
@@ -125,7 +125,7 @@ IntegrationOperation.partner_id == partner_id,
                 from_status=OperationStatus.RECEIVED,
                 to_status=OperationStatus.VALIDATION_FAILED,
                 reason=f"Ошибка валидации: {len(errors)} шт.",
-                changed_at=datetime.utcnow()
+                changed_at=datetime.now(timezone.utc)
             )
             self.db.add(history)
 
@@ -217,7 +217,7 @@ IntegrationOperation.partner_id == partner_id,
         operation.status = OperationStatus.RECEIVED
         operation.retry_count = 0
         operation.last_error_message = None
-        operation.updated_at = datetime.utcnow()
+        operation.updated_at = datetime.now(timezone.utc)
         operation.completed_at = None
 
         history = StatusHistory(
@@ -225,7 +225,7 @@ IntegrationOperation.partner_id == partner_id,
             from_status=old_status,
             to_status=OperationStatus.RECEIVED,
             reason=f"Ручной перезапуск пользователем #{user_id}",
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(timezone.utc),
         )
         self.db.add(history)
 

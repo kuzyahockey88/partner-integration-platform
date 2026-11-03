@@ -3,7 +3,7 @@ from sqlalchemy import (
     ForeignKey, Text, Index
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 import enum
 from ..core.database import Base
 
@@ -30,15 +30,15 @@ class IntegrationOperation(Base):
     status = Column(Enum(OperationStatus), default=OperationStatus.RECEIVED)
     version = Column(Integer, default=1)
 
-    received_at = Column(DateTime, nullable=False, default=func.now())
-    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
-    completed_at = Column(DateTime, nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     payload = Column(JSON, nullable=True)
     error_details = Column(JSON, nullable=True)
 
-    retry_count = Column(Integer, default=0)
-    max_retries = Column(Integer, default=3)
+    retry_count = Column(Integer, default=0, server_default=text("0"))
+    max_retries = Column(Integer, default=3,  server_default=text("3"))
     last_error_message = Column(Text,nullable=True)
 
     status_history = relationship("StatusHistory", back_populates="operation",
@@ -68,7 +68,7 @@ class StatusHistory(Base):
     to_status = Column(Enum(OperationStatus), nullable=False)
     reason = Column(Text, nullable=True)
 
-    changed_at = Column(DateTime, nullable=False, default=func.now())
+    changed_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
 
     operation = relationship("IntegrationOperation", back_populates="status_history")
 
@@ -92,7 +92,7 @@ class ValidationError(Base):
 
     error_message = Column(Text, nullable=False)
 
-    created_at = Column(DateTime, nullable=False, default=func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
 
     operation = relationship("IntegrationOperation", back_populates="validation_errors")
 

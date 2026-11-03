@@ -86,14 +86,14 @@ async def _process_operation_async(operation_id: str) -> dict:
 
         old_status = operation.status
         operation.status = OperationStatus.PROCESSING
-        operation.updated_at = datetime.utcnow()
+        operation.updated_at = datetime.now(timezone.utc)
 
         session.add(StatusHistory(
             operation=operation,
             from_status=old_status,
             to_status=OperationStatus.PROCESSING,
             reason="Начало обработки",
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(timezone.utc),
         ))
 
         await session.commit()
@@ -111,8 +111,8 @@ async def _process_operation_async(operation_id: str) -> dict:
         await asyncio.sleep(0.5)
 
         operation.status = OperationStatus.COMPLETED
-        operation.completed_at = datetime.utcnow()
-        operation.updated_at = datetime.utcnow()
+        operation.completed_at = datetime.now(timezone.utc)
+        operation.updated_at = datetime.now(timezone.utc)
         operation.last_error_message = None
 
         session.add(StatusHistory(
@@ -120,7 +120,7 @@ async def _process_operation_async(operation_id: str) -> dict:
             from_status=OperationStatus.PROCESSING,
             to_status=OperationStatus.COMPLETED,
             reason="Обработка завершена успешно",
-            changed_at=datetime.utcnow()
+            changed_at=datetime.now(timezone.utc)
         ))
 
         await session.commit()
@@ -167,14 +167,14 @@ async def _handle_failure(
         operation.status = new_status
         operation.retry_count = retry_count + 1
         operation.last_error_message = error_message[:500]
-        operation.updated_at = datetime.utcnow()
+        operation.updated_at = datetime.now(timezone.utc)
 
         session.add(StatusHistory(
             operation=operation,
             from_status=old_status,
             to_status=new_status,
             reason=reason,
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(timezone.utc),
         ))
 
         await session.commit()
@@ -218,7 +218,9 @@ async def _retry_failed_operations_async() -> dict:
                         OperationStatus.RECEIVED,
                     ]),
                     IntegrationOperation.updated_at < stuck_threshold_sql,
-                    IntegrationOperation.retry_count < IntegrationOperation.max_retries,
+                    func.coalesce(IntegrationOperation.retry_count, 0) < func.coalesce(
+                        IntegrationOperation.max_retries, 3
+                    ),
                 )
             ).limit(50)
 
